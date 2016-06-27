@@ -1,0 +1,175 @@
+ubuntu 更换内核版本
+-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-
+？？？
+1.是不是ubuntu任何版本都可以更换任意的内核版本？
+2.更换内核对编译环境是否有影响？
+3.
+
+-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-
+查看内核版本
+1.cat /proc/version
+Linux version 3.12.60
+uname -a
+uname -r
+lsb_release -a
+ 
+
+
+
+
+-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-·-
+一.查看系统启动文件里是否存在需要更换的内核版本：
+grep menuentry /boot/grub/grub.cfg 
+menuentry 'Ubuntu, with Linux 3.12.60' --class ubuntu --class gnu-linux --class gnu --class os {
+menuentry 'Ubuntu, with Linux 3.12.60 (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+menuentry 'Ubuntu, with Linux 3.12.60.old' --class ubuntu --class gnu-linux --class gnu --class os {
+menuentry 'Ubuntu, with Linux 3.12.60.old (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+menuentry 'Ubuntu, with Linux 3.2.0-101-generic' --class ubuntu --class gnu-linux --class gnu --class os {
+menuentry 'Ubuntu, with Linux 3.2.0-101-generic (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+menuentry 'Ubuntu, with Linux 3.2.0-23-generic' --class ubuntu --class gnu-linux --class gnu --class os {
+menuentry 'Ubuntu, with Linux 3.2.0-23-generic (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+
+如上包含恢复模式一共有8个版本，可更换的版本有8个
+若没有需要的版本，必须自己编译
+
+1. 有需要的版本：
+	更换方式：
+	若需要3.2.0-23-generic 启动
+	修改启动文件默认启动项：
+	sudo vim /boot/grub/grub.cfg ->set default="0"  修改为 set default="6"  (启动项默认从 0 开始)
+	重启电脑，使用uname -a 查看内核版本
+	
+2. 没有需要的版本：
+	(1)使用命令sudo apt-cache search linux-image 该命令将会显示本系统所有可以获取的内核
+	(2)如果看到有需要的内核版本，安装内核，假设你要安装的内核为2.6.39-0，则使用下面的命令
+
+	sudo apt-get install linux-headers-2.6.39-0-generic linux-image-2.6.39-0-generic
+
+	安装后，reboot即可，重启后，既是以新内核启动
+3. 从上面两步都没有需要的内核，那就需要自己下载内核源码编译，再安装
+	(1) 先进 www.kernel.org 下载所需要版本的内核源码 inux-3.12.60.tar.xz
+		解压到/usr/src/下，注意需要使用root权限
+		sudo xz -d linux-3.12.60.tar.xz -> linux-3.12.60.tar
+		sudo tar -xvf /usr/src/linux-3.12.60.tar -> linux-3.12.60
+
+		1、u-boot下载
+		ftp://ftp.denx.de/pub/u-boot/
+		2、内核下载
+		www.kernel.org
+		3、busybox下载
+		www.busybox.net
+	
+	(2)安装编译编译工具：
+		apt-get install kernel-package libncurses5-dev fakeroot wget
+		apt-get install libncurses5-dev build-essential kernel-package
+		
+		2.1.libncurses5-dev是为之后配置内核能运行 make menuconfig程序做准备
+			Build-essential为编译工具，kernel-package是编译内核工具
+		2.2.如果系统显示无法查找到这三个文件，输入#apt-get update更新数据源。
+	
+	(3)配置内核
+		在编译内核前，一般来说都需要对内核进行相应的配置。配置是精确控制新内核功能的机会。配置过程也控制哪些需编译到内核的二进制映像中(在启动时被载入)，哪些是需要时才装入的内核模块
+		首先进入内核源代码目录：
+
+		# cd /usr/src/linux-3.12.60
+		
+		如果不是第一次编译的话，有必要将内核源代码树置于一种完整和一致的状态（如果是第一次可跳过此步）。因此，推荐执行命令make mrproper。它将清除目录下所有配置文件和先前生成核心时产生的.o文件：
+
+		#make mrproper (这步可以不做)
+		
+		然后配置编译选项（此处使用原内核的配置文件，完整的配置命令看操作提示）：
+		建议使用当前系统配置文件，使用当前系统配置文件方法
+		该命令的作用是将原内核配置文件拷贝的当前目录下，并命名为.config。若需要进一步修改配置请参照操作提示。
+		config-3.2.0-23-generic 为当前正在运行的内核版本
+		cp /boot/config-3.2.0-23-generic ./.config
+	(4)编译内核,
+		在内核源码目录/usr/src/linux-3.12.60下执行 sudo make -j8 编译，等待
+		完成后产生的内核文件bzImage的位置在/usr/src/linux/arch/x86/boot 目录下(如果CPU是Intel x86的，则在/usr/src/linux/arch/i386/boot)
+		
+		如果选择了可加载模块，编译完内核后，要对选择的模块进行编译，可用：
+		#make modules(我们可以直接默认，就不要执行这个步骤了)
+		
+	(5) 安装新内核模块和新内核
+
+		首先，用下面的命令将新内核模块安装到系统的标准模块目录中：
+		#make modules_install
+
+
+		然后，用下面的命令将新内核安装到系统中：
+
+		# make install
+
+		通常，Linux在系统引导后从/boot目录下读取内核映像到内存中。因此如果想要使用自己编译的内核，就必须用make install命令将启动文件（内核映像）安装到/boot目录下。	
+		
+	(6) 了解grub启动文件
+		第一种：
+		执行 sudo grep menuentry /boot/grub/grub.cfg，会出现我们安装的版本，一般是第一项和第二项，如果有，就成功了
+		menuentry 'Ubuntu, with Linux 3.12.60' --class ubuntu --class gnu-linux --class gnu --class os {   
+		menuentry 'Ubuntu, with Linux 3.12.60 (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.12.60.old' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.12.60.old (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.2.0-101-generic' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.2.0-101-generic (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.2.0-23-generic' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.2.0-23-generic (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry "Memory test (memtest86+)" {
+		menuentry "Memory test (memtest86+, serial console 115200)" {
+		第二种：执行vim /boot/grub/grub.cfg, 如果出现如下内容，就成功了。
+		menuentry 'Ubuntu, with Linux 3.12.60' --class ubuntu --class gnu-linux --class 
+		gnu --class os {
+			recordfail
+			gfxmode $linux_gfx_mode
+			insmod gzio
+			insmod part_msdos
+			insmod ext2
+			set root='(hd0,msdos1)'
+			search --no-floppy --fs-uuid --set=root cd8f747c-c5f3-4c32-b9f9-9b12b59c
+		ef3e
+			linux	/boot/vmlinuz-3.12.60 root=UUID=cd8f747c-c5f3-4c32-b9f9-9b12b59c
+		ef3e ro   quiet splash $vt_handoff
+			initrd	/boot/initrd.img-3.12.60
+		}
+		menuentry 'Ubuntu, with Linux 3.12.60 (recovery mode)' --class ubuntu --class gn
+		u-linux --class gnu --class os {
+			recordfail
+			insmod gzio
+			insmod part_msdos
+			insmod ext2
+			set root='(hd0,msdos1)'
+			search --no-floppy --fs-uuid --set=root cd8f747c-c5f3-4c32-b9f9-9b12b59c
+		ef3e
+			echo	'Loading Linux 3.12.60 ...'
+			linux	/boot/vmlinuz-3.12.60 root=UUID=cd8f747c-c5f3-4c32-b9f9-9b12b59c
+		ef3e ro recovery nomodeset 
+			echo	'Loading initial ramdisk ...'
+			initrd	/boot/initrd.img-3.12.60
+		}
+
+	(7)重启电脑，执行 uname -a 查看内核版本号
+		若启动不了，则重开机时按shift进去内核选择项进入
+	
+
+回退版本:
+		修改启动项文件
+
+	若需要3.2.0-23-generic 启动
+	执行sudo grep menuentry /boot/grub/grub.cfg，查看版本在哪个位置，3.2.0-23-generic 在第6项，
+		menuentry 'Ubuntu, with Linux 3.12.60' --class ubuntu --class gnu-linux --class gnu --class os {   
+		menuentry 'Ubuntu, with Linux 3.12.60 (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.12.60.old' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.12.60.old (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.2.0-101-generic' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.2.0-101-generic (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.2.0-23-generic' --class ubuntu --class gnu-linux --class gnu --class os {
+		menuentry 'Ubuntu, with Linux 3.2.0-23-generic (recovery mode)' --class ubuntu --class gnu-linux --class gnu --class os {
+	修改启动文件默认启动项：
+	sudo vim /boot/grub/grub.cfg ->set default="0"  修改为 set default="6"  (启动项默认从 0 开始)
+	重启电脑，使用uname -a 查看内核版本
+
+		
+		公司路由器 地址：
+帐号：congkoo
+密码：ck61506058
+外网IP地址：117.184.202.130
+	
+	
